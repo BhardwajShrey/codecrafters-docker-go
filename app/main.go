@@ -23,7 +23,8 @@ func main() {
 
 	image := os.Args[2]
 
-	EnterNewJail(os.Args[3], image)
+	jailPath := EnterNewJail(os.Args[3], image)
+	defer os.Remove(jailPath)
 
 	cmd := exec.Command(command, args...)
 	cmd.Stderr = os.Stderr
@@ -37,13 +38,11 @@ func main() {
 	os.Exit(cmd.ProcessState.ExitCode())
 }
 
-func EnterNewJail(filepath string, image string) {
+func EnterNewJail(filepath string, image string) string {
 	tempDirPath, err := os.MkdirTemp("", "temp_folder_*")
 	if err != nil {
 		throwerror.ThrowError(err, "Unable to create temp directory")
 	}
-
-	defer os.Remove(tempDirPath)
 
 	err = os.Chmod(tempDirPath, 0777)
 	if err != nil {
@@ -58,4 +57,6 @@ func EnterNewJail(filepath string, image string) {
 	if err != nil {
 		throwerror.ThrowError(err, fmt.Sprintf("Error in executing chroot on %s", tempDirPath))
 	}
+
+	return tempDirPath
 }
