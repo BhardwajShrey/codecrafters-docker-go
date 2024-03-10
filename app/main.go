@@ -5,12 +5,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
-	"path"
-	"strings"
 	"syscall"
+
+	"github.com/codecrafters-io/docker-starter-go/dockerutils"
+	"github.com/codecrafters-io/docker-starter-go/throwerror"
 )
 
 // the next line is just for reference and contains the os.Args slice
@@ -21,7 +21,9 @@ func main() {
 	command := os.Args[3]
 	args := os.Args[4:len(os.Args)]
 
-	EnterNewJail(os.Args[3])
+	image := os.Args[2]
+
+	EnterNewJail(os.Args[3], image)
 
 	cmd := exec.Command(command, args...)
 	cmd.Stderr = os.Stderr
@@ -35,40 +37,25 @@ func main() {
 	os.Exit(cmd.ProcessState.ExitCode())
 }
 
-func EnterNewJail(filepath string) {
+func EnterNewJail(filepath string, image string) {
 	tempDirPath, err := os.MkdirTemp("", "temp_folder_*")
 	if err != nil {
-		throwError(err, "Unable to create temp directory")
+		throwerror.ThrowError(err, "Unable to create temp directory")
 	}
 
 	defer os.Remove(tempDirPath)
 
 	err = os.Chmod(tempDirPath, 0777)
 	if err != nil {
-		throwError(err, "Error modifying rwx on tempDirPath")
+		throwerror.ThrowError(err, "Error modifying rwx on tempDirPath")
 	}
 
-	filepathSplit := strings.Split(filepath, "/")
-	jailedDirPath := path.Join(tempDirPath, strings.Join(filepathSplit[0:len(filepathSplit)-1], "/"))
-
-	err = os.MkdirAll(jailedDirPath, 0777)
-	if err != nil {
-		throwError(err, fmt.Sprintf("Error in mkdirall to %s", jailedDirPath))
-	}
-
-	// not in the mood to write code to copy files
-	err = os.Link(filepath, path.Join(tempDirPath, filepath))
-	if err != nil {
-		throwError(err, "Error in link command")
-	}
+	authToken := dockerutils.GetAuthToken(image)
+	manifest := dockerutils.GetManifest(image, authToken)
+	dockerutils.DownloadAndExtractLayers(manifest.Layers, image, authToken, tempDirPath)
 
 	err = syscall.Chroot(tempDirPath)
 	if err != nil {
-		throwError(err, fmt.Sprintf("Error in executing chroot on %s", tempDirPath))
+		throwerror.ThrowError(err, fmt.Sprintf("Error in executing chroot on %s", tempDirPath))
 	}
-}
-
-func throwError(err error, msg string) {
-	log.Fatalf("%s: %v\n", msg, err)
-	os.Exit(1)
 }
